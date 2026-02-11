@@ -1,6 +1,6 @@
 streamlit
 requests
-BeautifulSoup
+beautifulsoup4
 pandas
 time
 urllib3
