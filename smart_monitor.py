@@ -30,8 +30,8 @@ url_options = {
 }
 selected_label = st.sidebar.selectbox("접속 서버를 선택하세요", list(url_options.keys()))
 target_url = url_options[selected_label]
-if st.sidebar.button("🔄 전체 데이터 새로고침"):
-    st.cache_data.clear()
+#if st.sidebar.button("🔄 전체 데이터 새로고침"):
+#    st.cache_data.clear()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 # --- 데이터 수집 함수 ---
@@ -412,6 +412,7 @@ else:
 
 
 # In[ ]:
+
 
 
 
