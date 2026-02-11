@@ -157,14 +157,18 @@ def get_sensor_style(val, col_name):
 
         if col_name == "공기압":
             if num < 100: return 'background-color: #ffcccc; color: #990000; font-weight: bold'  # 저압 경고
-            if num > 140: return 'background-color: #fff3cd; color: #856404'  # 고압 주의
+            if num > 140: return 'background-color: #fff3cd; color: #856404; font-weight: bold'  # 고압 주의
 
         elif col_name == "전압":
             if num < 2.8: return 'background-color: #ffcccc; color: #990000; font-weight: bold'  # 배터리 부족
-            if num > 3.2: return 'background-color: #fff3cd; color: #856404' # 배터리 과열 주의
+            if num > 3.2: return 'background-color: #fff3cd; color: #856404; font-weight: bold'  # 배터리 과열 주의
 
         elif col_name == "온도":
             if num >= 90: return 'background-color: #ffcccc; color: #990000; font-weight: bold'  # 과열 경고
+
+        elif col_name == "Success_Rate":
+            if num <= 50: return 'background-color: #ffcccc; color: #990000; font-weight: bold'  # 수신율 낮음 경고
+            if num <= 85: return 'background-color: #fff3cd; color: #856404; font-weight: bold'  # 수신율 낮음 주의
 
     except (ValueError, TypeError):
         pass
@@ -250,7 +254,6 @@ if not df_raw.empty:
         t_error_cars = []  # 온도 이상
         v_error_cars = []  # 전압 이상
         sensor_error_cars = [] # 전체 센서 이상 (중복 제거용)
-        comm_error_count = 0   # 통신 이상 차량 수계
 
         sorted_df = df_raw.sort_values("No")
         total_cars = len(df_raw)
@@ -290,7 +293,8 @@ if not df_raw.empty:
 
                                 styled_df = display_df.style.map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압']) \
                                                             .map(lambda x: get_sensor_style(x, "전압"), subset=['전압']) \
-                                                            .map(lambda x: get_sensor_style(x, "온도"), subset=['온도'])
+                                                            .map(lambda x: get_sensor_style(x, "온도"), subset=['온도']) \
+                                                            .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate'])
                                 st.dataframe(
                                     styled_df,
                                     width="stretch",
@@ -300,8 +304,8 @@ if not df_raw.empty:
                                         "공기압": st.column_config.TextColumn("공기압 (psi)", width="small"),
                                         "전압": st.column_config.TextColumn("전압 (V)", width="small"),
                                         "온도": st.column_config.TextColumn("온도 (°C)", width="small"),
-                                        "Success_Rate": st.column_config.TextColumn("수신 성공률", width="small"),
-                                        "Normal_Rate": st.column_config.TextColumn("정상 수신율", width="small"),
+                                        "Success_Rate": st.column_config.TextColumn("최종 수신율", width="small"),
+                                        "Normal_Rate": st.column_config.TextColumn("일반 수신율", width="small"),
                                     }
                                 )
                                 for _, s_row in s_df.iterrows():
@@ -379,9 +383,13 @@ if not df_raw.empty:
 
                 final_df = final_df.fillna("-")
                 display_df = final_df[["SensorID", "공기압", "전압", "온도", "Success_Rate", "Normal_Rate"]]
+                styled_df = display_df.style.map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압']) \
+                                            .map(lambda x: get_sensor_style(x, "전압"), subset=['전압']) \
+                                            .map(lambda x: get_sensor_style(x, "온도"), subset=['온도']) \
+                                            .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate'])
                 st.write(f"📊 **{selected_car} 타이어별 상세 정보**")
                 st.dataframe(
-                    display_df,
+                    styled_df,
                     width="stretch",
                     hide_index=True,
                     column_config={
@@ -389,8 +397,8 @@ if not df_raw.empty:
                         "공기압": st.column_config.TextColumn("공기압 (psi)", width="medium"),
                         "전압": st.column_config.TextColumn("전압 (V)", width="medium"),
                         "온도": st.column_config.TextColumn("온도 (°C)", width="medium"),
-                        "Success_Rate": st.column_config.TextColumn("수신 성공률", width="medium"),
-                        "Normal_Rate": st.column_config.TextColumn("정상 수신율", width="medium"),
+                        "Success_Rate": st.column_config.TextColumn("최종 수신율", width="medium"),
+                        "Normal_Rate": st.column_config.TextColumn("일반 수신율", width="medium"),
                     }
                 )
             else:
