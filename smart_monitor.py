@@ -10,7 +10,11 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import urllib3
-import streamlit.components.v1 as components
+from datetime import datetime
+import pytz
+
+seoul_timezone = pytz.timezone('Asia/Seoul')
+now = datetime.now(seoul_timezone)
 
 # SSL 경고 무시
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -222,7 +226,7 @@ if not df_raw.empty:
     c1, c2, c3 = st.columns(3)
     c1.metric("전체 차량", f"{len(df_raw)}대")
     c2.metric("RFM 이상", f"{err_count}건", delta=err_count, delta_color="inverse")
-    c3.metric("갱신 시간", time.strftime("%H:%M:%S"))
+    c3.metric("갱신 시간 (KST)", now.strftime("%Y-%m-%d %H:%M:%S"))
     df_display = df_raw.sort_values(by=["is_err", "No"], ascending=[False, True])
     styled_main_df = df_display.style.apply(style_communication, axis=1).map(color_status_text, subset=['상태'])
     st.dataframe(
