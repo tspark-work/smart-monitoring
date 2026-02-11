@@ -1,0 +1,6 @@
+streamlit
+requests
+BeautifulSoup
+pandas
+time
+urllib3
