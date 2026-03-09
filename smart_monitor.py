@@ -353,205 +353,218 @@ with st.sidebar:
 df_raw = fetch_device_list(target_url)
 
 if not df_raw.empty:
-    # 1. 상단 요약 지표
-    st.write("### 🚍 실시간 RFM 통신 상태")
-    err_count = len(df_raw[df_raw['is_err']])
-    c1, c2, c3 = st.columns(3)
-    c1.metric("전체 차량", f"{len(df_raw)}대")
-    c2.metric("RFM 이상", f"{err_count}건", delta=err_count, delta_color="inverse")
-    c3.metric("갱신 시간 (KST)", now.strftime("%Y-%m-%d %H:%M:%S"))
+    tab1, tab2 = st.tabs(["📊 상세 모니터링", "📡 통신 상태 요약"])
 
-    # 2. 메인 통신 상태 테이블
-    df_display = df_raw.sort_values(by=["is_err", "No"], ascending=[False, True])
-    st.dataframe(
-        df_display.style.apply(style_communication, axis=1).map(color_status_text, subset=['상태']),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "차량번호": st.column_config.TextColumn("차량번호", width="medium"),
-            "SerialNo": st.column_config.TextColumn("통신기 SerialNo", width="medium"),
-            "R0": st.column_config.TextColumn("R0", width="small"),
-            "R1": st.column_config.TextColumn("R1", width="small"),
-            "R2": st.column_config.TextColumn("R2", width="small"),
-            "최근수집": st.column_config.TextColumn("최근 수집 시간", width="medium"),
-            "상태": st.column_config.TextColumn("통신 상태", width="small"),
-            "is_err": None,  # None으로 설정하면 화면에 렌더링되지 않습니다.
-            # "No": None       # 순서 정렬용 No 컬럼도 숨기고 싶다면 추가하세요.
-        }
-    )
+    with tab1:
+        st.subheader("🚍 상세 데이터 모니터링")
+        car_list = ["선택하세요", "🔍 전체 조회"] + df_raw.sort_values("No")['차량번호'].tolist()
+        selected_car = st.selectbox("조회 대상 선택", car_list)
 
-    st.markdown("---")
-    st.subheader("🚍 상세 데이터 모니터링")
-    car_list = ["선택하세요", "🔍 전체 조회"] + df_raw.sort_values("No")['차량번호'].tolist()
-    selected_car = st.selectbox("조회 대상 선택", car_list)
+        if selected_car == "🔍 전체 조회":
+            summary_placeholder = st.empty()
+            my_bar = st.progress(0, text="데이터 취합 중...")
 
-    if selected_car == "🔍 전체 조회":
-        summary_placeholder = st.empty()
-        my_bar = st.progress(0, text="데이터 취합 중...")
+            df_raw['No'] = pd.to_numeric(df_raw['No'], errors='coerce').fillna(999)
+            sorted_df = df_raw.sort_values(by="No", ascending=True)
 
-        df_raw['No'] = pd.to_numeric(df_raw['No'], errors='coerce').fillna(999)
-        sorted_df = df_raw.sort_values(by="No", ascending=True)
+            total_cars = len(sorted_df)
+            err_map = {"cp": [], "p": [], "t": [], "v": [], "r": []}
 
-        total_cars = len(sorted_df)
-        err_map = {"cp": [], "p": [], "t": [], "v": [], "r": []}
+            col_setup = {
+                "SensorID": st.column_config.TextColumn("센서ID", width='small'),
+                "냉간공기압": st.column_config.TextColumn("냉간(공기압)", width='small'),
+                "공기압": st.column_config.TextColumn("공기압", width='small'),
+                "전압": st.column_config.TextColumn("전압", width='small'),
+                "온도": st.column_config.TextColumn("온도", width='small'),
+                "Success_Rate": st.column_config.TextColumn("수신율", width='small'),
+            }
 
-        col_setup = {
-            "SensorID": st.column_config.TextColumn("센서ID", width='small'),
-            "냉간공기압": st.column_config.TextColumn("냉간(공기압)", width='small'),
-            "공기압": st.column_config.TextColumn("공기압", width='small'),
-            "전압": st.column_config.TextColumn("전압", width='small'),
-            "온도": st.column_config.TextColumn("온도", width='small'),
-            "Success_Rate": st.column_config.TextColumn("수신율", width='small'),
-        }
+            for i in range(0, total_cars, 2):
+                cols = st.columns(2)
+                for j in range(2):
+                    if i + j < total_cars:
+                        row = sorted_df.iloc[i + j]
+                        s_no, c_no = row.SerialNo, row.차량번호
 
-        for i in range(0, total_cars, 2):
-            cols = st.columns(2)
-            for j in range(2):
-                if i + j < total_cars:
-                    row = sorted_df.iloc[i + j]
-                    s_no, c_no = row.SerialNo, row.차량번호
+                        with cols[j]:
+                            m_data, s_df = get_normal_status_data(target_url, s_no)
+                            if not s_df.empty:
+                                # 데이터 병합 (냉간/수신율)
+                                r_info = st.session_state.rate_cache.get(s_no, ("-", "-", "-", pd.DataFrame()))
+                                total_count = r_info[0]
+                                success_count = r_info[1]
+                                total_rate = r_info[2]
+                                r_df = r_info[3]
 
-                    with cols[j]:
-                        m_data, s_df = get_normal_status_data(target_url, s_no)
-                        if not s_df.empty:
-                            # 데이터 병합 (냉간/수신율)
-                            r_info = st.session_state.rate_cache.get(s_no, ("-", "-", "-", pd.DataFrame()))
-                            total_count = r_info[0]
-                            success_count = r_info[1]
-                            total_rate = r_info[2]
-                            r_df = r_info[3]
+                                cold_df = st.session_state.cold_cache.get(s_no, pd.DataFrame())
 
-                            cold_df = st.session_state.cold_cache.get(s_no, pd.DataFrame())
+                                final_df = pd.merge(s_df, r_df[['SensorID', 'Success_Rate', 'Normal_Rate']] if not r_df.empty else pd.DataFrame(columns=['SensorID', 'Success_Rate', 'Normal_Rate']), on="SensorID", how="left")
+                                if not cold_df.empty:
+                                    final_df = pd.merge(final_df, cold_df[["SensorID", "냉간공기압"]], on="SensorID", how="left")
+                                else:
+                                    final_df["냉간공기압"] = "-"
 
-                            final_df = pd.merge(s_df, r_df[['SensorID', 'Success_Rate', 'Normal_Rate']] if not r_df.empty else pd.DataFrame(columns=['SensorID', 'Success_Rate', 'Normal_Rate']), on="SensorID", how="left")
-                            if not cold_df.empty:
-                                final_df = pd.merge(final_df, cold_df[["SensorID", "냉간공기압"]], on="SensorID", how="left")
-                            else:
-                                final_df["냉간공기압"] = "-"
+                                final_df = final_df.fillna("-")
 
-                            final_df = final_df.fillna("-")
+                                for _, s_row in final_df.iterrows():
+                                    cp_val = clean_float(s_row.get('냉간공기압'), None)
+                                    if cp_val is not None and cp_val < 100: err_map["cp"].append(c_no)
+                                    p_val = clean_float(s_row.get('공기압'), None)
+                                    if p_val is not None and (p_val < 100 or p_val > 145): err_map["p"].append(c_no)
+                                    t_val = clean_float(s_row.get('온도'), None)
+                                    if t_val is not None and t_val >= 90: err_map["t"].append(c_no)
+                                    v_val = clean_float(s_row.get('전압'), None)
+                                    if v_val is not None and v_val < 2.8: err_map["v"].append(c_no)
+                                    r_val = clean_float(s_row.get('Success_Rate'), None)
+                                    if r_val is not None and r_val <= 50: err_map["r"].append(c_no)
 
-                            for _, s_row in final_df.iterrows():
-                                cp_val = clean_float(s_row.get('냉간공기압'), None)
-                                if cp_val is not None and cp_val < 100: err_map["cp"].append(c_no)
-                                p_val = clean_float(s_row.get('공기압'), None)
-                                if p_val is not None and (p_val < 100 or p_val > 145): err_map["p"].append(c_no)
-                                t_val = clean_float(s_row.get('온도'), None)
-                                if t_val is not None and t_val >= 90: err_map["t"].append(c_no)
-                                v_val = clean_float(s_row.get('전압'), None)
-                                if v_val is not None and v_val < 2.8: err_map["v"].append(c_no)
-                                r_val = clean_float(s_row.get('Success_Rate'), None)
-                                if r_val is not None and r_val <= 50: err_map["r"].append(c_no)
+                                # 개별 차량 UI 렌더링
+                                # st.markdown(f"**🚍 {c_no}** ({s_no})")
+                                c1, c2, c3 = st.columns(3)
+                                with c1:
+                                    st.markdown(f"**🚍 {c_no}** ({s_no})")
+                                with c2:
+                                    dev_url = f"{target_url.rstrip('/')}/normal/list/{s_no}"
+                                    st.link_button("🔗 Dev 페이지", dev_url, use_container_width=True)
+                                with c3:
+                                    map_url = f"{target_url.rstrip('/')}/map/list/{s_no}"
+                                    st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True)
 
-                            # 개별 차량 UI 렌더링
-                            # st.markdown(f"**🚍 {c_no}** ({s_no})")
-                            c1, c2 = st.columns([3, 1])
-                            with c1:
-                                st.markdown(f"**🚍 {c_no}** ({s_no})")
-                            with c2:
-                                map_url = f"{target_url.rstrip('/')}/map/list/{s_no}"
-                                st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True)
-                            st.info(f"🕒 수집: {m_data.get('수집시간', '-')} | 📊 **전체 수신율: {total_rate}% ({success_count}/{total_count})")
-                            display_df = final_df[["SensorID", "냉간공기압", "공기압", "전압", "온도", "Success_Rate"]]
-                            styled_res = display_df.style.map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압']) \
-                                                   .map(lambda x: get_sensor_style(x, "냉간공기압"), subset=['냉간공기압']) \
-                                                   .map(lambda x: get_sensor_style(x, "전압"), subset=['전압']) \
-                                                   .map(lambda x: get_sensor_style(x, "온도"), subset=['온도']) \
-                                                   .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate'])
-                            st.dataframe(styled_res, width="stretch", hide_index=True, column_config=col_setup)
-            my_bar.progress((i + 1) / total_cars)
-        my_bar.empty()
+                                st.info(f"🕒 수집: {m_data.get('수집시간', '-')} | 📊 **전체 수신율: {total_rate}% ({success_count}/{total_count})")
+                                display_df = final_df[["SensorID", "냉간공기압", "공기압", "전압", "온도", "Success_Rate"]]
+                                styled_res = display_df.style.map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압']) \
+                                                    .map(lambda x: get_sensor_style(x, "냉간공기압"), subset=['냉간공기압']) \
+                                                    .map(lambda x: get_sensor_style(x, "전압"), subset=['전압']) \
+                                                    .map(lambda x: get_sensor_style(x, "온도"), subset=['온도']) \
+                                                    .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate'])
+                                st.dataframe(styled_res, width="stretch", hide_index=True, column_config=col_setup)
+                my_bar.progress((i + 1) / total_cars)
+            my_bar.empty()
 
-        with summary_placeholder.container():
-            st.markdown("### 🚨 점검 필요 차량 요약")
-            sum_cols = st.columns(5)
-            labels = ["❄️ 냉간", "🎈 공기압", "🔥 온도", "🔋 전압", "📡 수신율"]
-            keys = ["cp", "p", "t", "v", "r"]
+            with summary_placeholder.container():
+                st.markdown("### 🚨 점검 필요 차량 요약")
+                sum_cols = st.columns(5)
+                labels = ["❄️ 냉간", "🎈 공기압", "🔥 온도", "🔋 전압", "📡 수신율"]
+                keys = ["cp", "p", "t", "v", "r"]
 
-            for col, label, key in zip(sum_cols, labels, keys):
-                unique_cars = sorted(list(set(err_map[key])))
-                col.markdown(f"**{label} ({len(unique_cars)})**")
-                if unique_cars:
-                    col.text_area(label, "\n".join(unique_cars), height=100, label_visibility="collapsed", key=f"err_{key}")
-                else:
-                    col.write("✅ 정상")
-
-    elif selected_car != "선택하세요":
-        s_no = df_raw[df_raw['차량번호'] == selected_car]['SerialNo'].values[0]
-        with st.spinner(f"{selected_car} 데이터 분석 중..."):
-            m_data, s_df = get_normal_status_data(target_url, s_no)
-            if s_no in st.session_state.rate_cache:
-                total_count, success_count, total_rate, r_df = st.session_state.rate_cache[s_no]
-            else:
-                total_count, success_count, total_rate, r_df = "-", "-", "-", pd.DataFrame()
-
-            if m_data:
-                # 상단 정보 카드
-                st.info(f"🛰️ 통신기({s_no}) 정보 | 🕒 수집: {m_data.get('수집시간', '-')} | 📍 위치: {m_data.get('위치', '-')} | 📊 전체 수신율: {total_rate}% ({success_count}/{total_count})")
-                map_url = f"{target_url.rstrip('/')}/map/list/{s_no}"
-                st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True, type="primary")
-
-                if not s_df.empty:
-                    # 센서 ID 타입 정제
-                    s_df['SensorID'] = s_df['SensorID'].astype(str).str.strip()
-
-                    # 데이터 병합: 실시간 + 수신율
-                    if not r_df.empty:
-                        r_df['SensorID'] = r_df['SensorID'].astype(str).str.strip()
-                        final_df = pd.merge(s_df, r_df[['SensorID', 'Success_Rate', 'Normal_Rate']], on="SensorID", how="left")
+                for col, label, key in zip(sum_cols, labels, keys):
+                    unique_cars = sorted(list(set(err_map[key])))
+                    col.markdown(f"**{label} ({len(unique_cars)})**")
+                    if unique_cars:
+                        col.text_area(label, "\n".join(unique_cars), height=100, label_visibility="collapsed", key=f"err_{key}")
                     else:
-                        final_df = s_df.copy()
-                        final_df["Success_Rate"] = "-"
-                        final_df["Normal_Rate"] = "-"
+                        col.write("✅ 정상")
 
-                    # 데이터 병합: 냉간 공기압 (캐시 확인)
-                    cold_df = st.session_state.cold_cache.get(s_no, pd.DataFrame())
-                    if not cold_df.empty:
-                        cold_df['SensorID'] = cold_df['SensorID'].astype(str).str.strip()
-                        final_df = pd.merge(final_df, cold_df[["SensorID", "냉간공기압", "냉간계측시간"]], on="SensorID", how="left")
-                    else:
-                        final_df["냉간공기압"] = "-"
-                        final_df["냉간계측시간"] = "-"
-
-                    # 결측치 처리 및 정렬
-                    final_df = final_df.fillna("-")
-
-                    # 화면 표시용 컬럼 정리
-                    display_df = final_df[["SensorID", "냉간공기압", "공기압", "전압", "온도", "Success_Rate", "냉간계측시간"]]
-
-                    # 스타일 적용
-                    styled_df = (display_df.style
-                        .map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압'])
-                        .map(lambda x: get_sensor_style(x, "냉간공기압"), subset=['냉간공기압'])
-                        .map(lambda x: get_sensor_style(x, "전압"), subset=['전압'])
-                        .map(lambda x: get_sensor_style(x, "온도"), subset=['온도'])
-                        .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate']))
-
-                    st.write(f"📊 **{selected_car} 타이어별 상세 데이터**")
-                    st.dataframe(
-                        styled_df,
-                        width="stretch",
-                        hide_index=True,
-                        column_config={
-                            "SensorID": st.column_config.TextColumn("센서 ID"),
-                            "냉간공기압": st.column_config.TextColumn("❄️ 냉간(공기압)"),
-                            "공기압": st.column_config.TextColumn("🎈 공기압(PSI)"),
-                            "전압": st.column_config.TextColumn("🔋 전압(V)"),
-                            "온도": st.column_config.TextColumn("🔥 온도(℃)"),
-                            "Success_Rate": st.column_config.TextColumn("📡 수신율"),
-                            "냉간계측시간": st.column_config.TextColumn("🕒 냉간 측정시점")
-                        }
-                    )
-
-                    # 하단 가이드라인
-                    with st.expander("💡 데이터 판정 기준"):
-                        st.write("""
-                        - **공기압**: 100 PSI 미만(저압 경고), 145 PSI 초과(고압 주의)
-                        - **전압**: 2.8V 미만(배터리 교체 필요)
-                        - **온도**: 90℃ 이상(과열 위험)
-                        - **수신율**: 50% 이하(통신 환경 점검 필요)
-                        """)
+        elif selected_car != "선택하세요":
+            s_no = df_raw[df_raw['차량번호'] == selected_car]['SerialNo'].values[0]
+            with st.spinner(f"{selected_car} 데이터 분석 중..."):
+                m_data, s_df = get_normal_status_data(target_url, s_no)
+                if s_no in st.session_state.rate_cache:
+                    total_count, success_count, total_rate, r_df = st.session_state.rate_cache[s_no]
                 else:
-                    st.warning(f"⚠️ 현재 수집된 실시간 센서 데이터가 없습니다.")
-            else:
-                st.error(f"❌ 서버에서 차량 데이터를 불러올 수 없습니다. 통신 상태를 확인하세요.")
+                    total_count, success_count, total_rate, r_df = "-", "-", "-", pd.DataFrame()
+
+                if m_data:
+                    # 상단 정보 카드
+                    st.info(f"🛰️ 통신기({s_no}) 정보 | 🕒 수집: {m_data.get('수집시간', '-')} | 📍 위치: {m_data.get('위치', '-')} | 📊 전체 수신율: {total_rate}% ({success_count}/{total_count})")
+                    map_url = f"{target_url.rstrip('/')}/map/list/{s_no}"
+                    dev_url = f"{target_url.rstrip('/')}/normal/list/{s_no}"
+                    # st.link_button("Dev 페이지", dev_url, use_container_width=True, type="primary")
+                    # st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True, type="primary")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.link_button("🔗 Dev 페이지", dev_url, use_container_width=True, type="primary")
+                    with col2:
+                        st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True, type="primary")
+
+                    if not s_df.empty:
+                        # 센서 ID 타입 정제
+                        s_df['SensorID'] = s_df['SensorID'].astype(str).str.strip()
+
+                        # 데이터 병합: 실시간 + 수신율
+                        if not r_df.empty:
+                            r_df['SensorID'] = r_df['SensorID'].astype(str).str.strip()
+                            final_df = pd.merge(s_df, r_df[['SensorID', 'Success_Rate', 'Normal_Rate']], on="SensorID", how="left")
+                        else:
+                            final_df = s_df.copy()
+                            final_df["Success_Rate"] = "-"
+                            final_df["Normal_Rate"] = "-"
+
+                        # 데이터 병합: 냉간 공기압 (캐시 확인)
+                        cold_df = st.session_state.cold_cache.get(s_no, pd.DataFrame())
+                        if not cold_df.empty:
+                            cold_df['SensorID'] = cold_df['SensorID'].astype(str).str.strip()
+                            final_df = pd.merge(final_df, cold_df[["SensorID", "냉간공기압", "냉간계측시간"]], on="SensorID", how="left")
+                        else:
+                            final_df["냉간공기압"] = "-"
+                            final_df["냉간계측시간"] = "-"
+
+                        # 결측치 처리 및 정렬
+                        final_df = final_df.fillna("-")
+
+                        # 화면 표시용 컬럼 정리
+                        display_df = final_df[["SensorID", "냉간공기압", "공기압", "전압", "온도", "Success_Rate", "냉간계측시간"]]
+
+                        # 스타일 적용
+                        styled_df = (display_df.style
+                            .map(lambda x: get_sensor_style(x, "공기압"), subset=['공기압'])
+                            .map(lambda x: get_sensor_style(x, "냉간공기압"), subset=['냉간공기압'])
+                            .map(lambda x: get_sensor_style(x, "전압"), subset=['전압'])
+                            .map(lambda x: get_sensor_style(x, "온도"), subset=['온도'])
+                            .map(lambda x: get_sensor_style(x, "Success_Rate"), subset=['Success_Rate']))
+
+                        st.write(f"📊 **{selected_car} 타이어별 상세 데이터**")
+                        st.dataframe(
+                            styled_df,
+                            width="stretch",
+                            hide_index=True,
+                            column_config={
+                                "SensorID": st.column_config.TextColumn("센서 ID"),
+                                "냉간공기압": st.column_config.TextColumn("❄️ 냉간(공기압)"),
+                                "공기압": st.column_config.TextColumn("🎈 공기압(PSI)"),
+                                "전압": st.column_config.TextColumn("🔋 전압(V)"),
+                                "온도": st.column_config.TextColumn("🔥 온도(℃)"),
+                                "Success_Rate": st.column_config.TextColumn("📡 수신율"),
+                                "냉간계측시간": st.column_config.TextColumn("🕒 냉간 측정시점")
+                            }
+                        )
+
+                        # 하단 가이드라인
+                        with st.expander("💡 데이터 판정 기준"):
+                            st.write("""
+                            - **공기압**: 100 PSI 미만(저압 경고), 145 PSI 초과(고압 주의)
+                            - **전압**: 2.8V 미만(배터리 교체 필요)
+                            - **온도**: 90℃ 이상(과열 위험)
+                            - **수신율**: 50% 이하(통신 환경 점검 필요)
+                            """)
+                    else:
+                        st.warning(f"⚠️ 현재 수집된 실시간 센서 데이터가 없습니다.")
+                else:
+                    st.error(f"❌ 서버에서 차량 데이터를 불러올 수 없습니다. 통신 상태를 확인하세요.")
+
+    with tab2:
+        st.write("### 🚍 실시간 RFM 통신 상태")
+        err_count = len(df_raw[df_raw['is_err']])
+        c1, c2, c3 = st.columns(3)
+        c1.metric("전체 차량", f"{len(df_raw)}대")
+        c2.metric("RFM 이상", f"{err_count}건", delta=err_count, delta_color="inverse")
+        c3.metric("갱신 시간 (KST)", now.strftime("%Y-%m-%d %H:%M:%S"))
+
+        # 2. 메인 통신 상태 테이블
+        df_display = df_raw.sort_values(by=["is_err", "No"], ascending=[False, True])
+        st.dataframe(
+            df_display.style.apply(style_communication, axis=1).map(color_status_text, subset=['상태']),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "차량번호": st.column_config.TextColumn("차량번호", width="medium"),
+                "SerialNo": st.column_config.TextColumn("통신기 SerialNo", width="medium"),
+                "R0": st.column_config.TextColumn("R0", width="small"),
+                "R1": st.column_config.TextColumn("R1", width="small"),
+                "R2": st.column_config.TextColumn("R2", width="small"),
+                "최근수집": st.column_config.TextColumn("최근 수집 시간", width="medium"),
+                "상태": st.column_config.TextColumn("통신 상태", width="small"),
+                "is_err": None,  # None으로 설정하면 화면에 렌더링되지 않습니다.
+                # "No": None       # 순서 정렬용 No 컬럼도 숨기고 싶다면 추가하세요.
+            }
+        )
