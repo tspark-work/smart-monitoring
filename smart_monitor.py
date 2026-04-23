@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -306,6 +312,7 @@ def fetch_device_list(base_url):
                 data.append({
                     "No": cols[0].get_text(strip=True),
                     "차량번호": cols[2].get_text(strip=True),
+                    "펌웨어버전": cols[3].get_text(strip=True),
                     "SerialNo": s_no,
                     "R0": r_vals["R0"], "R1": r_vals["R1"], "R2": r_vals["R2"],
                     "최근수집": r_vals["Date"],
@@ -384,7 +391,7 @@ if not df_raw.empty:
                 for j in range(2):
                     if i + j < total_cars:
                         row = sorted_df.iloc[i + j]
-                        s_no, c_no = row.SerialNo, row.차량번호
+                        s_no, c_no, f_ver = row.SerialNo, row.차량번호, row.펌웨어버전
 
                         with cols[j]:
                             m_data, s_df = get_normal_status_data(target_url, s_no)
@@ -420,13 +427,15 @@ if not df_raw.empty:
 
                                 # 개별 차량 UI 렌더링
                                 # st.markdown(f"**🚍 {c_no}** ({s_no})")
-                                c1, c2, c3 = st.columns(3)
+                                c1, c2, c3, c4 = st.columns(4)
                                 with c1:
-                                    st.markdown(f"**🚍 {c_no}** ({s_no})")
+                                    st.markdown(f"**🚍 {c_no} ({s_no})**")
                                 with c2:
+                                    st.markdown(f"({f_ver})")
+                                with c3:
                                     dev_url = f"{target_url.rstrip('/')}/normal/list/{s_no}"
                                     st.link_button("🔗 Dev 페이지", dev_url, use_container_width=True)
-                                with c3:
+                                with c4:
                                     map_url = f"{target_url.rstrip('/')}/map/list/{s_no}"
                                     st.link_button("🗺️ 주행 경로 지도", map_url, use_container_width=True)
 
@@ -568,3 +577,10 @@ if not df_raw.empty:
                 # "No": None       # 순서 정렬용 No 컬럼도 숨기고 싶다면 추가하세요.
             }
         )
+
+
+# In[ ]:
+
+
+
+
